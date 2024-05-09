@@ -61,13 +61,13 @@ search_base = on_command('定数查歌', aliases={'search base'}, priority=5)
 search_bpm = on_command('bpm查歌', aliases={'search bpm'}, priority=5)
 search_artist = on_command('曲师查歌', aliases={'search artist'}, priority=5)
 search_charter = on_command('谱师查歌', aliases={'search charter'}, priority=5)
-random_song = on_regex(r'^[随来给]个((?:dx|sd|标准))?([绿黄红紫白]?)([0-9]+\+?)$', priority=5)
-mai_what = on_regex(r'.*mai.*什么', priority=5)
+# random_song = on_regex(r'^[随来给]个((?:dx|sd|标准))?([绿黄红紫白]?)([0-9]+\+?)$', priority=5)
+# mai_what = on_regex(r'.*mai.*什么', priority=5)
 search = on_command('查歌', aliases={'search'}, priority=5)  # 注意 on 响应器的注册顺序，search 应当优先于 search_* 之前注册
-query_chart = on_regex(r'^id\s?([0-9]+)$', re.IGNORECASE, priority=5)
+# query_chart = on_regex(r'^id\s?([0-9]+)$', re.IGNORECASE, priority=5)
 mai_today = on_command('今日mai', aliases={'今日舞萌', '今日运势'}, priority=5)
-what_song = on_endswith(('是什么歌', '是啥歌'), priority=5)
-alias_song = on_regex(r'^(id)?\s?(.+)\s?有什么别[名称]$', re.IGNORECASE, priority=5)
+# what_song = on_endswith(('是什么歌', '是啥歌'), priority=5)
+# alias_song = on_regex(r'^(id)?\s?(.+)\s?有什么别[名称]$', re.IGNORECASE, priority=5)
 alias_local_apply = on_command('添加本地别名', aliases={'添加本地别称'}, priority=5)
 alias_apply = on_command('添加别名', aliases={'增加别名', '增添别名', '添加别称'}, priority=5, permission=GROUP_ADMIN | GROUP_OWNER)
 alias_agree = on_command('同意别名', aliases={'同意别称'}, priority=5)
@@ -78,15 +78,16 @@ alias_global_switch = on_command('aliasswitch', aliases={'全局关闭别名推�
 alias_update = on_command('aliasupdate', aliases={'更新别名库'}, priority=5, permission=SUPERUSER)
 score = on_command('分数线', priority=5)
 best50 = on_command('b50', aliases={'B50'}, priority=5)
+filter50 = on_command('f50', aliases={'F50'}, priority=5)
 minfo = on_command('minfo', aliases={'minfo', 'Minfo', 'MINFO'}, priority=5)
 ginfo = on_command('ginfo', aliases={'ginfo', 'Ginfo', 'GINFO'}, priority=5)
 table_update = on_command('更新定数表', priority=5, permission=SUPERUSER)
-rating_table = on_regex(r'([0-9]+\+?)定数表', priority=5)
-rating_table_pf = on_regex(r'([0-9]+\+?)完成表', priority=5)
-rise_score = on_regex(r'^我要在?([0-9]+\+?)?上([0-9]+)分\s?(.+)?', priority=5)
-plate_process = on_regex(r'^([真超檄橙暁晓桃櫻樱紫菫堇白雪輝辉熊華华爽舞霸星宙祭祝])([極极将舞神者]舞?)进度\s?(.+)?', priority=5)
-level_process = on_regex(r'^([0-9]+\+?)\s?(.+)进度\s?(.+)?', priority=5)
-level_achievement_list = on_regex(r'^([0-9]+\+?)分数列表\s?([0-9]+)?\s?(.+)?', priority=5)
+# rating_table = on_regex(r'([0-9]+\+?)定数表', priority=5)
+# rating_table_pf = on_regex(r'([0-9]+\+?)完成表', priority=5)
+# rise_score = on_regex(r'^我要在?([0-9]+\+?)?上([0-9]+)分\s?(.+)?', priority=5)
+# plate_process = on_regex(r'^([真超檄橙暁晓桃櫻樱紫菫堇白雪輝辉熊華华爽舞霸星宙祭祝])([極极将舞神者]舞?)进度\s?(.+)?', priority=5)
+# level_process = on_regex(r'^([0-9]+\+?)\s?(.+)进度\s?(.+)?', priority=5)
+# level_achievement_list = on_regex(r'^([0-9]+\+?)分数列表\s?([0-9]+)?\s?(.+)?', priority=5)
 rating_ranking = on_command('查看排名', aliases={'查看排行'}, priority=5)
 guess_music_start = on_command('猜歌', priority=5)
 guess_music_solve = on_message(rule=is_now_playing_guess_music, priority=5)
@@ -131,6 +132,23 @@ async def get_music():
     log.info('正在获取maimai所有曲目别名信息')
     await mai.get_music_alias()
     log.success('maimai数据获取完成')
+
+    # min_charts = []
+    # max_charts = []
+    # for music in mai.total_list:
+    #     min_rate, max_rate = math.inf, -math.inf
+    #     for chart in music.charts:
+    #         rate = chart.notes.slide / sum(chart.notes)
+    #         # rate = music.basic_info.bpm
+    #         min_rate = min(min_rate, rate)
+    #         max_rate = max(max_rate, rate)
+    #     min_charts.append((min_rate, music.id))
+    #     max_charts.append((max_rate, music.id))
+    # result = [int(id) for _, id in sorted(min_charts, key=lambda i: i[0])]
+    # log.debug(f'{result[:50]}')
+    # result = [int(id) for _, id in sorted(max_charts, key=lambda i: i[0], reverse=True)]
+    # log.debug(f'{result[:50]}')
+
     mai.guess()
 
 
@@ -269,33 +287,33 @@ async def _(event: MessageEvent, arg: Message = CommandArg()):
     await search_charter.finish(MessageSegment.image(to_bytes_io(msg)), reply_message=True)
 
 
-@random_song.handle()
-async def _(match = RegexMatched()):
-    try:
-        diff = match.group(1)
-        if diff == 'dx':
-            tp = ['DX']
-        elif diff == 'sd' or diff == '标准':
-            tp = ['SD']
-        else:
-            tp = ['SD', 'DX']
-        level = match.group(3)
-        if match.group(2) == '':
-            music_data = mai.total_list.filter(level=level, type=tp)
-        else:
-            music_data = mai.total_list.filter(level=level, diff=['绿黄红紫白'.index(match[1])], type=tp)
-        if len(music_data) == 0:
-            msg = '没有这样的乐曲哦。'
-        else:
-            msg = await new_draw_music_info(music_data.random())
-    except:
-        msg = '随机命令错误，请检查语法'
-    await random_song.finish(msg, reply_message=True)
+# @random_song.handle()
+# async def _(match = RegexMatched()):
+#     try:
+#         diff = match.group(1)
+#         if diff == 'dx':
+#             tp = ['DX']
+#         elif diff == 'sd' or diff == '标准':
+#             tp = ['SD']
+#         else:
+#             tp = ['SD', 'DX']
+#         level = match.group(3)
+#         if match.group(2) == '':
+#             music_data = mai.total_list.filter(level=level, type=tp)
+#         else:
+#             music_data = mai.total_list.filter(level=level, diff=['绿黄红紫白'.index(match[1])], type=tp)
+#         if len(music_data) == 0:
+#             msg = '没有这样的乐曲哦。'
+#         else:
+#             msg = await new_draw_music_info(music_data.random())
+#     except:
+#         msg = '随机命令错误，请检查语法'
+#     await random_song.finish(msg, reply_message=True)
 
 
-@mai_what.handle()
-async def _():
-    await mai_what.finish(await new_draw_music_info(mai.total_list.random()), reply_message=True)
+# @mai_what.handle()
+# async def _():
+#     await mai_what.finish(await new_draw_music_info(mai.total_list.random()), reply_message=True)
 
 
 @search.handle()
@@ -318,15 +336,15 @@ async def _(args: Message = CommandArg()):
         await search.finish(f'结果过多（{len(result)} 条），请缩小查询范围。', reply_message=True)
 
 
-@query_chart.handle()
-async def _(match = RegexMatched()):
-    id = match.group(1)
-    music = mai.total_list.by_id(id)
-    if not music:
-        msg = f'未找到ID为[{id}]的乐曲'
-    else:
-        msg = await new_draw_music_info(music)
-    await query_chart.send(msg)
+# @query_chart.handle()
+# async def _(match = RegexMatched()):
+#     id = match.group(1)
+#     music = mai.total_list.by_id(id)
+#     if not music:
+#         msg = f'未找到ID为[{id}]的乐曲'
+#     else:
+#         msg = await new_draw_music_info(music)
+#     await query_chart.send(msg)
 
 
 @mai_today.handle()
@@ -351,65 +369,65 @@ async def _(event: MessageEvent):
     await mai_today.finish(msg, reply_message=True)
 
 
-@what_song.handle()
-async def _(event: MessageEvent, end: str = Endswith()):
-    name = event.get_plaintext().lower()[0:-len(end)].strip()  # before 3.9
+# @what_song.handle()
+# async def _(event: MessageEvent, end: str = Endswith()):
+#     name = event.get_plaintext().lower()[0:-len(end)].strip()  # before 3.9
 
-    data = mai.total_alias_list.by_alias(name)
-    if not data:
-        obj = await maiApi.get_songs(name)
-        if not obj:
-            await what_song.finish(f'未找到别名为「{name}」的歌曲\n※ 可以使用「添加别名」指令给该乐曲添加别名\n※ 如果是歌名的一部分，请使用「查歌」指令查询哦。', reply_message=True)
-        msg = f'未找到别名为「{name}」的歌曲，但找到与此相同别名的投票：\n'
-        for _s in obj['status']:
-            msg += f'- {_s["Tag"]}.ID {_s["SongID"]}: {name}\n'
-        msg += f'※ 可以使用指令「同意别名 {_s["Tag"]}」进行投票'
-        await what_song.finish(msg, reply_message=True)
-    if len(data) != 1:
-        msg = f'找到{len(data)}个相同别名的曲目：\n'
-        for songs in data:
-            msg += f'{songs.SongID}：{songs.Name}\n'
-        msg += '※ 请使用「id xxxxx」查询指定曲目'
-        await what_song.finish(msg.strip(), reply_message=True)
+#     data = mai.total_alias_list.by_alias(name)
+#     if not data:
+#         obj = await maiApi.get_songs(name)
+#         if not obj:
+#             await what_song.finish(f'未找到别名为「{name}」的歌曲\n※ 可以使用「添加别名」指令给该乐曲添加别名\n※ 如果是歌名的一部分，请使用「查歌」指令查询哦。', reply_message=True)
+#         msg = f'未找到别名为「{name}」的歌曲，但找到与此相同别名的投票：\n'
+#         for _s in obj['status']:
+#             msg += f'- {_s["Tag"]}.ID {_s["SongID"]}: {name}\n'
+#         msg += f'※ 可以使用指令「同意别名 {_s["Tag"]}」进行投票'
+#         await what_song.finish(msg, reply_message=True)
+#     if len(data) != 1:
+#         msg = f'找到{len(data)}个相同别名的曲目：\n'
+#         for songs in data:
+#             msg += f'{songs.SongID}：{songs.Name}\n'
+#         msg += '※ 请使用「id xxxxx」查询指定曲目'
+#         await what_song.finish(msg.strip(), reply_message=True)
 
-    music = mai.total_list.by_id(str(data[0].SongID))
-    await what_song.finish('您要找的是不是：' + await new_draw_music_info(music), reply_message=True)
+#     music = mai.total_list.by_id(str(data[0].SongID))
+#     await what_song.finish('您要找的是不是：' + await new_draw_music_info(music), reply_message=True)
 
 
-@alias_song.handle()
-async def _(match = RegexMatched()):
-    findid = bool(match.group(1))
-    name = match.group(2)
-    if findid and name.isdigit():
-        alias_id = mai.total_alias_list.by_id(name)
-        if not alias_id:
-            await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
-        else:
-            aliases = alias_id
-    else:            
-        aliases = mai.total_alias_list.by_alias(name)
-        if not aliases:
-            if name.isdigit():
-                alias_id = mai.total_alias_list.by_id(name)
-                if not alias_id:
-                    await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
-                else:
-                    aliases = alias_id
-            else:
-                await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
-    if len(aliases) != 1:
-        msg = []
-        for songs in aliases:
-            alias_list = '\n'.join(songs.Alias)
-            msg.append(f'ID：{songs.SongID}\n{alias_list}')
-        await alias_song.finish(f'找到{len(aliases)}个相同别名的曲目：\n' + '\n======\n'.join(msg), reply_message=True)
+# @alias_song.handle()
+# async def _(match = RegexMatched()):
+#     findid = bool(match.group(1))
+#     name = match.group(2)
+#     if findid and name.isdigit():
+#         alias_id = mai.total_alias_list.by_id(name)
+#         if not alias_id:
+#             await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
+#         else:
+#             aliases = alias_id
+#     else:            
+#         aliases = mai.total_alias_list.by_alias(name)
+#         if not aliases:
+#             if name.isdigit():
+#                 alias_id = mai.total_alias_list.by_id(name)
+#                 if not alias_id:
+#                     await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
+#                 else:
+#                     aliases = alias_id
+#             else:
+#                 await alias_song.finish('未找到此歌曲\n可以使用「添加别名」指令给该乐曲添加别名', reply_message=True)
+#     if len(aliases) != 1:
+#         msg = []
+#         for songs in aliases:
+#             alias_list = '\n'.join(songs.Alias)
+#             msg.append(f'ID：{songs.SongID}\n{alias_list}')
+#         await alias_song.finish(f'找到{len(aliases)}个相同别名的曲目：\n' + '\n======\n'.join(msg), reply_message=True)
 
-    if len(aliases[0].Alias) == 1:
-        await alias_song.finish('该曲目没有别名', reply_message=True)
+#     if len(aliases[0].Alias) == 1:
+#         await alias_song.finish('该曲目没有别名', reply_message=True)
 
-    msg = f'该曲目有以下别名：\nID：{aliases[0].SongID}\n'
-    msg += '\n'.join(aliases[0].Alias)
-    await alias_song.finish(msg, reply_message=True)
+#     msg = f'该曲目有以下别名：\nID：{aliases[0].SongID}\n'
+#     msg += '\n'.join(aliases[0].Alias)
+#     await alias_song.finish(msg, reply_message=True)
 
 
 @alias_local_apply.handle()
@@ -641,6 +659,16 @@ async def _(event: MessageEvent, matcher: Matcher, arg: Message = CommandArg()):
     await matcher.finish(await generate(qqid, username), reply_message=True)
 
 
+@filter50.handle()
+async def _(event: MessageEvent, matcher: Matcher, arg: Message = CommandArg()):
+    args = arg.extract_plain_text().strip().split()
+    qqid = get_at_qq(arg) or event.user_id
+    if _q := get_at_qq(arg):
+        qqid = _q
+    from .libraries.maimaidx_filter_50 import generate_filter_50
+    await matcher.finish(await generate_filter_50(args, qqid, None), reply_message=True)
+
+
 @minfo.handle()
 async def _(event: MessageEvent, arg: Message = CommandArg()):
     qqid = get_at_qq(arg) or event.user_id
@@ -721,123 +749,123 @@ async def _(event: PrivateMessageEvent):
     await table_update.send(await update_rating_table())
 
 
-@rating_table.handle()
-async def _(match = RegexMatched()):
-    args = match.group(1).strip()
-    if args in levelList[:5]:
-        await rating_table.send('只支持查询lv6-15的定数表', reply_message=True)
-    elif args in levelList[5:]:
-        if args in levelList[-3:]:
-            img = ratingdir / '14.png'
-        else:
-            img = ratingdir / f'{args}.png'
-        await rating_table.send(MessageSegment.image(await read_image(img)))
-    else:
-        await rating_table.send('无法识别的定数', reply_message=True)
+# @rating_table.handle()
+# async def _(match = RegexMatched()):
+#     args = match.group(1).strip()
+#     if args in levelList[:5]:
+#         await rating_table.send('只支持查询lv6-15的定数表', reply_message=True)
+#     elif args in levelList[5:]:
+#         if args in levelList[-3:]:
+#             img = ratingdir / '14.png'
+#         else:
+#             img = ratingdir / f'{args}.png'
+#         await rating_table.send(MessageSegment.image(await read_image(img)))
+#     else:
+#         await rating_table.send('无法识别的定数', reply_message=True)
 
 
-@rating_table_pf.handle()
-async def _(event: MessageEvent, match = RegexMatched()):
-    qqid = event.user_id
-    args: str = match.group(1).strip()
-    if args in levelList[:5]:
-        await rating_table_pf.send('只支持查询lv6-15的完成表', reply_message=True)
-    elif args in levelList[5:]:
-        img = await rating_table_draw(qqid, args)
-        await rating_table_pf.send(img, reply_message=True)
-    # else:
-    #     await rating_table_pf.send('无法识别的定数', reply_message=True)
+# @rating_table_pf.handle()
+# async def _(event: MessageEvent, match = RegexMatched()):
+#     qqid = event.user_id
+#     args: str = match.group(1).strip()
+#     if args in levelList[:5]:
+#         await rating_table_pf.send('只支持查询lv6-15的完成表', reply_message=True)
+#     elif args in levelList[5:]:
+#         img = await rating_table_draw(qqid, args)
+#         await rating_table_pf.send(img, reply_message=True)
+#     # else:
+#     #     await rating_table_pf.send('无法识别的定数', reply_message=True)
 
 
-@rise_score.handle()  # 慎用，垃圾代码非常吃机器性能
-async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
-    qqid = get_at_qq(event.get_message()) or event.user_id
-    nickname = ''
-    username = None
+# @rise_score.handle()  # 慎用，垃圾代码非常吃机器性能
+# async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
+#     qqid = get_at_qq(event.get_message()) or event.user_id
+#     nickname = ''
+#     username = None
     
-    rating = match.group(1)
-    score = match.group(2)
+#     rating = match.group(1)
+#     score = match.group(2)
     
-    if rating and rating not in levelList:
-        await rise_score.finish('无此等级', reply_message=True)
-    elif match.group(3):
-        nickname = match.group(3)
-        username = match.group(3).strip()
+#     if rating and rating not in levelList:
+#         await rise_score.finish('无此等级', reply_message=True)
+#     elif match.group(3):
+#         nickname = match.group(3)
+#         username = match.group(3).strip()
 
-    if qqid != event.user_id:
-        nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
+#     if qqid != event.user_id:
+#         nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
 
-    data = await rise_score_data(qqid, username, rating, score, nickname)
-    await rise_score.finish(data, reply_message=True)
+#     data = await rise_score_data(qqid, username, rating, score, nickname)
+#     await rise_score.finish(data, reply_message=True)
 
 
-@plate_process.handle()
-async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
-    qqid = get_at_qq(event.get_message()) or event.user_id
-    nickname = ''
-    username = None
+# @plate_process.handle()
+# async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
+#     qqid = get_at_qq(event.get_message()) or event.user_id
+#     nickname = ''
+#     username = None
     
-    ver = match.group(1)
-    plan = match.group(2)
-    if f'{ver}{plan}' == '真将':
-        await plate_process.finish('真系没有真将哦', reply_message=True)
-    elif match.group(3):
-        nickname = match.group(3)
-        username = match.group(3).strip()
+#     ver = match.group(1)
+#     plan = match.group(2)
+#     if f'{ver}{plan}' == '真将':
+#         await plate_process.finish('真系没有真将哦', reply_message=True)
+#     elif match.group(3):
+#         nickname = match.group(3)
+#         username = match.group(3).strip()
 
-    if qqid != event.user_id:
-        nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
+#     if qqid != event.user_id:
+#         nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
 
-    data = await player_plate_data(qqid, username, ver, plan, nickname)
-    await plate_process.finish(data, reply_message=True)
+#     data = await player_plate_data(qqid, username, ver, plan, nickname)
+#     await plate_process.finish(data, reply_message=True)
 
 
-@level_process.handle()
-async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
-    qqid = get_at_qq(event.get_message()) or event.user_id
-    nickname = ''
-    username = None
+# @level_process.handle()
+# async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
+#     qqid = get_at_qq(event.get_message()) or event.user_id
+#     nickname = ''
+#     username = None
     
-    rating = match.group(1)
-    rank = match.group(2)
+#     rating = match.group(1)
+#     rank = match.group(2)
     
-    if rating not in levelList:
-        await level_process.finish('无此等级', reply_message=True)
-    if rank.lower() not in scoreRank + comboRank + syncRank:
-        await level_process.finish('无此评价等级', reply_message=True)
-    if levelList.index(rating) < 11 or (rank.lower() in scoreRank and scoreRank.index(rank.lower()) < 8):
-        await level_process.finish('兄啊，有点志向好不好', reply_message=True)
-    elif match.group(3):
-        nickname = match.group(3)
-        username =  match.group(3).strip()
+#     if rating not in levelList:
+#         await level_process.finish('无此等级', reply_message=True)
+#     if rank.lower() not in scoreRank + comboRank + syncRank:
+#         await level_process.finish('无此评价等级', reply_message=True)
+#     if levelList.index(rating) < 11 or (rank.lower() in scoreRank and scoreRank.index(rank.lower()) < 8):
+#         await level_process.finish('兄啊，有点志向好不好', reply_message=True)
+#     elif match.group(3):
+#         nickname = match.group(3)
+#         username =  match.group(3).strip()
 
-    if qqid != event.user_id:
-        nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
+#     if qqid != event.user_id:
+#         nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
 
-    data = await level_process_data(qqid, username, rating, rank, nickname)
-    await level_process.finish(data, reply_message=True)
+#     data = await level_process_data(qqid, username, rating, rank, nickname)
+#     await level_process.finish(data, reply_message=True)
 
 
-@level_achievement_list.handle()
-async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
-    qqid = get_at_qq(event.get_message()) or event.user_id
-    nickname = ''
-    username = None
+# @level_achievement_list.handle()
+# async def _(bot: Bot, event: MessageEvent, match = RegexMatched()):
+#     qqid = get_at_qq(event.get_message()) or event.user_id
+#     nickname = ''
+#     username = None
     
-    rating = match.group(1)
-    page = match.group(2)
+#     rating = match.group(1)
+#     page = match.group(2)
     
-    if rating not in levelList:
-        await level_achievement_list.finish('无此等级', reply_message=True)
-    elif match.group(3):
-        nickname = match.group(3)
-        username = match.group(3).strip()
+#     if rating not in levelList:
+#         await level_achievement_list.finish('无此等级', reply_message=True)
+#     elif match.group(3):
+#         nickname = match.group(3)
+#         username = match.group(3).strip()
 
-    if qqid != event.user_id:
-        nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
+#     if qqid != event.user_id:
+#         nickname = (await bot.get_stranger_info(user_id=qqid))['nickname']
 
-    data = await level_achievement_list_data(qqid, username, rating, page, nickname)
-    await level_achievement_list.finish(data, reply_message=True)
+#     data = await level_achievement_list_data(qqid, username, rating, page, nickname)
+#     await level_achievement_list.finish(data, reply_message=True)
 
 
 @rating_ranking.handle()
