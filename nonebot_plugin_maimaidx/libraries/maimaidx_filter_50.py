@@ -14,7 +14,7 @@ from ..config import *
 from .image import DrawText, image_to_bytesio
 from .maimaidx_api_data import maiApi
 from .maimaidx_error import *
-from .maimaidx_music import download_music_pictrue, mai, Chart
+from .maimaidx_music import download_music_pictrue, mai
 
 
 
@@ -47,7 +47,25 @@ class UserInfo(BaseModel):
 
 class DrawFilter:
 
-    def __init__(self, filter: Callable[[ChartInfo], bool], cmp: Callable[[ChartInfo, ChartInfo], int], UserInfo: UserInfo, qqId: Optional[Union[int, str]] = None) -> None:
+    basic = Image.open(maimaidir / 'b40_score_basic.png')
+    advanced = Image.open(maimaidir / 'b40_score_advanced.png')
+    expert = Image.open(maimaidir / 'b40_score_expert.png')
+    master = Image.open(maimaidir / 'b40_score_master.png')
+    remaster = Image.open(maimaidir / 'b40_score_remaster.png')
+    logo = Image.open(maimaidir / 'logo.png').resize((378, 172))
+    Name = Image.open(maimaidir / 'Name.png')
+    ClassLevel = Image.open(maimaidir / 'UI_FBR_Class_00.png').resize((144, 87))
+    rating = Image.open(maimaidir / 'UI_CMN_Shougou_Rainbow.png').resize((454, 50))
+    dxstar = [Image.open(maimaidir / f'UI_RSL_DXScore_Star_0{_ + 1}.png').resize((20, 20)) for _ in range(3)]
+    bg = Image.open(maimaidir / 'b40_bg.png').convert('RGBA')
+    icon = Image.open(maimaidir / 'UI_Icon_309503.png').resize((214, 214))
+
+    def __init__(self,
+                 filter: Callable[[ChartInfo], bool],
+                 cmp: Callable[[ChartInfo, ChartInfo], int],
+                 UserInfo: UserInfo,
+                 qqId: Optional[Union[int, str]] = None
+                 ) -> None:
 
         self.userName = UserInfo.nickname
         self.plate = UserInfo.plate
@@ -138,7 +156,7 @@ class DrawFilter:
             diff_sum_dx = info.dxScore / dxscore * 100
             dxtype, dxnum = dxScore(diff_sum_dx)
             for _ in range(dxnum):
-                self._im.alpha_composite(self.dxstar[dxtype], (x + DXSTAR_DEST[dxnum] + 20 * _, y + 74))
+                self._im.alpha_composite(DrawFilter.dxstar[dxtype], (x + DXSTAR_DEST[dxnum] + 20 * _, y + 74))
 
             self._tb.draw(x + 40, y + 148, 20, str(info.song_id), anchor='mm')
             title = info.title
@@ -154,32 +172,20 @@ class DrawFilter:
 
 
     async def draw(self):
-        
-        basic = Image.open(maimaidir / 'b40_score_basic.png')
-        advanced = Image.open(maimaidir / 'b40_score_advanced.png')
-        expert = Image.open(maimaidir / 'b40_score_expert.png')
-        master = Image.open(maimaidir / 'b40_score_master.png')
-        remaster = Image.open(maimaidir / 'b40_score_remaster.png')
-        logo = Image.open(maimaidir / 'logo.png').resize((378, 172))
         dx_rating = Image.open(maimaidir / self._findRaPic()).resize((300, 59))
-        Name = Image.open(maimaidir / 'Name.png')
         MatchLevel = Image.open(maimaidir / self._findMatchLevel()).resize((134, 55))
-        ClassLevel = Image.open(maimaidir / 'UI_FBR_Class_00.png').resize((144, 87))
-        rating = Image.open(maimaidir / 'UI_CMN_Shougou_Rainbow.png').resize((454, 50))
-        self._diff = [basic, advanced, expert, master, remaster]
-        self.dxstar = [Image.open(maimaidir / f'UI_RSL_DXScore_Star_0{_ + 1}.png').resize((20, 20)) for _ in range(3)]
+        self._diff = [DrawFilter.basic, DrawFilter.advanced, DrawFilter.expert, DrawFilter.master, DrawFilter.remaster]
 
         # 作图
-        self._im = Image.open(maimaidir / 'b40_bg.png').convert('RGBA')
+        self._im = DrawFilter.bg.copy()
 
-        self._im.alpha_composite(logo, (5, 130))
+        self._im.alpha_composite(DrawFilter.logo, (5, 130))
         if self.plate:
             plate = Image.open(maimaidir / f'{self.plate}.png').resize((1420, 230))
         else:
             plate = Image.open(maimaidir / 'UI_Plate_300101.png').resize((1420, 230))
         self._im.alpha_composite(plate, (390, 100))
-        icon = Image.open(maimaidir / 'UI_Icon_309503.png').resize((214, 214))
-        self._im.alpha_composite(icon, (398, 108))
+        self._im.alpha_composite(DrawFilter.icon, (398, 108))
         if self.qqId:
             try:
                 async with httpx.AsyncClient() as client:
@@ -193,10 +199,10 @@ class DrawFilter:
         Rating = f'{self.Rating:05d}'
         for n, i in enumerate(Rating):
             self._im.alpha_composite(Image.open(maimaidir / f'UI_NUM_Drating_{i}.png').resize((28, 34)), (760 + 23 * n, 137))
-        self._im.alpha_composite(Name, (620, 200))
+        self._im.alpha_composite(DrawFilter.Name, (620, 200))
         self._im.alpha_composite(MatchLevel, (935, 205))
-        self._im.alpha_composite(ClassLevel, (926, 105))
-        self._im.alpha_composite(rating, (620, 275))
+        self._im.alpha_composite(DrawFilter.ClassLevel, (926, 105))
+        self._im.alpha_composite(DrawFilter.rating, (620, 275))
 
         text_im = ImageDraw.Draw(self._im)
         self._meiryo = DrawText(text_im, MEIRYO)
