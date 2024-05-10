@@ -45,7 +45,13 @@ class UserInfo(BaseModel):
     records: List[ChartInfo]
 
 
-class DrawFilter:
+class ChartInfoGroup:
+    def __init__(self, name: str, charts: List[ChartInfo], limit: int) -> None:
+        self.name = name
+        self.charts = charts
+        self.limit = limit
+
+class ChartListDrawer:
 
     basic = Image.open(maimaidir / 'b40_score_basic.png')
     advanced = Image.open(maimaidir / 'b40_score_advanced.png')
@@ -61,6 +67,7 @@ class DrawFilter:
     icon = Image.open(maimaidir / 'UI_Icon_309503.png').resize((214, 214))
 
     def __init__(self,
+                 chart_groups: List[ChartInfoGroup],
                  filter: Callable[[ChartInfo], bool],
                  cmp: Callable[[ChartInfo, ChartInfo], int],
                  UserInfo: UserInfo,
@@ -72,20 +79,12 @@ class DrawFilter:
         self.addRating = UserInfo.additional_rating
         self.Rating = UserInfo.rating
         self.qqId = qqId
-        self.records = UserInfo.records
-        # 选出is_new=False的records
-        self.sdBest = [i for i in self.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == False]
-        self.dxBest = [i for i in self.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == True]
-
-        self.sdBest = [i for i in self.sdBest if filter(i)]
-        self.dxBest = [i for i in self.dxBest if filter(i)]
-
-        #按ra从高到低排序，取前35首
-        self.sdBest = sorted(self.sdBest, key=cmp_to_key(cmp))[:35]
-        self.dxBest = sorted(self.dxBest, key=cmp_to_key(cmp))[:15]
-
-        # 把sdBest和dxBest的所有歌曲ra加起来
-        self.Rating = sum([_.ra for _ in self.sdBest]) + sum([_.ra for _ in self.dxBest])
+        self.chart_groups = chart_groups.copy()
+        self.Rating = 0
+        for chart_group in self.chart_groups:
+            chart_group.charts = [i for i in chart_group.charts if filter(i)]
+            chart_group.charts = sorted(chart_group.charts, key=cmp_to_key(cmp))[:chart_group.limit]
+            self.Rating += sum([_.ra for _ in chart_group.charts])
 
 
     def _findRaPic(self) -> str:
@@ -122,15 +121,17 @@ class DrawFilter:
         return f'UI_DNM_DaniPlate_{num}.png'
 
 
-    async def whiledraw(self, data: List[ChartInfo], type: bool) -> None:
+    async def whiledraw(self, data: List[ChartInfo], top: int) -> int:
         # y为第一排纵向坐标，dy为各排间距
-        y = 430 if type else 1670
+        y = top
         dy = 170
 
         TEXT_COLOR = [(255, 255, 255, 255), (255, 255, 255, 255), (255, 255, 255, 255), (255, 255, 255, 255), (103, 20, 141, 255)]
         DXSTAR_DEST = [0, 330, 320, 310, 300, 290]
 
         for num, info in enumerate(data):
+            if y > 2010:
+                raise Exception('图片生成失败：超出范围')
             if num % 5 == 0:
                 x = 70
                 y += dy if num != 0 else 0
@@ -156,7 +157,7 @@ class DrawFilter:
             diff_sum_dx = info.dxScore / dxscore * 100
             dxtype, dxnum = dxScore(diff_sum_dx)
             for _ in range(dxnum):
-                self._im.alpha_composite(DrawFilter.dxstar[dxtype], (x + DXSTAR_DEST[dxnum] + 20 * _, y + 74))
+                self._im.alpha_composite(ChartListDrawer.dxstar[dxtype], (x + DXSTAR_DEST[dxnum] + 20 * _, y + 74))
 
             self._tb.draw(x + 40, y + 148, 20, str(info.song_id), anchor='mm')
             title = info.title
@@ -170,22 +171,25 @@ class DrawFilter:
             self._tb.draw(x + 340, y + 60, 18, f'{info.dxScore}/{dxscore}', TEXT_COLOR[info.level_index], anchor='mm')
             self._tb.draw(x + 155, y + 80, 22, f'{info.ds} -> {info.ra}', TEXT_COLOR[info.level_index], anchor='lm')
 
+        # 返回下一组的纵向坐标
+        return y + dy + 50
+
 
     async def draw(self):
         dx_rating = Image.open(maimaidir / self._findRaPic()).resize((300, 59))
         MatchLevel = Image.open(maimaidir / self._findMatchLevel()).resize((134, 55))
-        self._diff = [DrawFilter.basic, DrawFilter.advanced, DrawFilter.expert, DrawFilter.master, DrawFilter.remaster]
+        self._diff = [ChartListDrawer.basic, ChartListDrawer.advanced, ChartListDrawer.expert, ChartListDrawer.master, ChartListDrawer.remaster]
 
         # 作图
-        self._im = DrawFilter.bg.copy()
+        self._im = ChartListDrawer.bg.copy()
 
-        self._im.alpha_composite(DrawFilter.logo, (5, 130))
+        self._im.alpha_composite(ChartListDrawer.logo, (5, 130))
         if self.plate:
             plate = Image.open(maimaidir / f'{self.plate}.png').resize((1420, 230))
         else:
             plate = Image.open(maimaidir / 'UI_Plate_300101.png').resize((1420, 230))
         self._im.alpha_composite(plate, (390, 100))
-        self._im.alpha_composite(DrawFilter.icon, (398, 108))
+        self._im.alpha_composite(ChartListDrawer.icon, (398, 108))
         if self.qqId:
             try:
                 async with httpx.AsyncClient() as client:
@@ -199,10 +203,10 @@ class DrawFilter:
         Rating = f'{self.Rating:05d}'
         for n, i in enumerate(Rating):
             self._im.alpha_composite(Image.open(maimaidir / f'UI_NUM_Drating_{i}.png').resize((28, 34)), (760 + 23 * n, 137))
-        self._im.alpha_composite(DrawFilter.Name, (620, 200))
+        self._im.alpha_composite(ChartListDrawer.Name, (620, 200))
         self._im.alpha_composite(MatchLevel, (935, 205))
-        self._im.alpha_composite(DrawFilter.ClassLevel, (926, 105))
-        self._im.alpha_composite(DrawFilter.rating, (620, 275))
+        self._im.alpha_composite(ChartListDrawer.ClassLevel, (926, 105))
+        self._im.alpha_composite(ChartListDrawer.rating, (620, 275))
 
         text_im = ImageDraw.Draw(self._im)
         self._meiryo = DrawText(text_im, MEIRYO)
@@ -210,12 +214,18 @@ class DrawFilter:
         self._tb = DrawText(text_im, TBFONT)
 
         self._siyuan.draw(635, 235, 40, self.userName, (0, 0, 0, 255), 'lm')
-        sdrating, dxrating = sum([_.ra for _ in self.sdBest]), sum([_.ra for _ in self.dxBest])
-        self._tb.draw(847, 295, 28, f'B35: {sdrating} + B15: {dxrating} = {self.Rating}', (0, 0, 0, 255), 'mm', 3, (255, 255, 255, 255))
+        rating_message = ''
+        for chart_group in self.chart_groups:
+            if rating_message:  
+                rating_message += ' + '
+            rating_message += f'{chart_group.name}: {sum([_.ra for _ in chart_group.charts])}'
+        rating_message += f' = {self.Rating}'
+        self._tb.draw(847, 295, 28, rating_message, (0, 0, 0, 255), 'mm', 3, (255, 255, 255, 255))
         self._meiryo.draw(900, 2365, 35, f'Designed by Yuri-YuzuChaN & BlueDeer233 | Generated by {maiconfig.botName} BOT', (103, 20, 141, 255), 'mm', 3, (255, 255, 255, 255))
 
-        await self.whiledraw(self.sdBest, True)
-        await self.whiledraw(self.dxBest, False)
+        top = 430
+        for chart_group in self.chart_groups:
+            top = await self.whiledraw(chart_group.charts, top)
 
         return self._im.resize((1760, 1920))
 
@@ -584,7 +594,13 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
         except ValueError as e:
             return str(e)
 
-        draw_best = DrawFilter(filter, cmp, mai_info, qqid)
+        charts_sd = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == False]
+        charts_dx = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == True]
+        chart_groups = [
+            ChartInfoGroup('B35', charts_sd, 35),
+            ChartInfoGroup('B15', charts_dx, 15),
+        ]
+        draw_best = ChartListDrawer(chart_groups, filter, cmp, mai_info, qqid)
         
         pic = await draw_best.draw()
         msg = MessageSegment.image(image_to_bytesio(pic))
