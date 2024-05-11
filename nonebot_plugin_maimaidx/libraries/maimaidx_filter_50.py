@@ -10,7 +10,7 @@ from .image import image_to_bytesio
 from .maimaidx_api_data import maiApi
 from .maimaidx_error import *
 from .maimaidx_music import mai
-from .maimaidx_chart_list_drawer import ChartListDrawer, ChartInfoGroup, ChartInfo, UserInfo, dxScore
+from .maimaidx_chart_list_drawer import ChartListDrawer, ChartInfoGroup, ChartInfo, UserInfo, dxScore, computeRa
 
 
 class BaseFilterArg:
@@ -69,9 +69,10 @@ class FilterArgCategory(BaseFilterArg):
         music = mai.total_list.by_id(str(info.song_id))
         return category[music.basic_info.genre] in self.categories
 
-def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Callable[[ChartInfo, ChartInfo], int]]:
+def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Callable[[ChartInfo, ChartInfo], int], bool]:
     filter_list: List[BaseFilterArg] = []
     cmp_type: Tuple[str, Optional[str]] = ('ra', None)
+    use_fit_diff = False
     reverse = False
 
     def parse(prefix: str, arg: str, re_str: str) -> Tuple[Optional[str], Optional[str]]:
@@ -125,7 +126,9 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
                 category_str = category_str[1:]
             categories = [category.lower() for category in category_str.split('+,;＋，；')]
             for item in categories:
-                if item not in category:
+                if item in category:
+                    item = category[item]
+                if item not in category.values():
                     raise ValueError(f'未知谱面分类：{item}')
             filter_list.append(FilterArgCategory(categories))
         elif arg.startswith('cmp'):
@@ -143,6 +146,8 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
                 cmp_type = (result.group('num'), result.group('den'))
             else:
                 raise ValueError(f'未知排序方式：{cmp_type_str}')
+        elif arg == 'fit':
+            use_fit_diff = True
         elif arg == 'rev':
             reverse = True
         else:
@@ -204,7 +209,7 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
         else:
             return 0
 
-    return (filter, cmp)
+    return (filter, cmp, use_fit_diff)
 
 def getTotalDxScore(info: ChartInfo) -> int:
     return sum(mai.total_list.by_id(str(info.song_id)).charts[info.level_index].notes) * 3
@@ -235,6 +240,7 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
   + 谱面信息：diff(ds) 定数 / bpm / fit 拟合难度差
   + 谱面音符数：tap / hold / slide / touch / break / note
   + 寸止与锁血建议指定范围
+- fit 使用拟合难度作为定数
 - rev 倒序排序
 例：f50 diff12-13 star=1 achv～100 cmp=achv rev'''))
     try:
@@ -252,9 +258,21 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
 
         mai_info = UserInfo(**obj)
         try:
-            filter, cmp = parse_filter_args(new_args)
+            filter, cmp, use_fit_diff = parse_filter_args(new_args)
         except ValueError as e:
             return str(e)
+        
+        if use_fit_diff:
+            for chart_info in mai_info.records:
+                music = mai.total_list.by_id(str(chart_info.song_id))
+                chart_info.ra = 0
+                if  music.stats is None:
+                    continue
+                stat = music.stats[chart_info.level_index]
+                if stat is None:
+                    continue
+                chart_info.ds = stat.fit_diff
+                chart_info.ra = computeRa(chart_info.ds, chart_info.achievements)
 
         charts_sd = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == False]
         charts_dx = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == True]
@@ -262,7 +280,7 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
             ChartInfoGroup('B35', charts_sd, 35),
             ChartInfoGroup('B15', charts_dx, 15),
         ]
-        draw_best = ChartListDrawer(chart_groups, filter, cmp, mai_info, qqid)
+        draw_best = ChartListDrawer(mai_info, chart_groups, filter, cmp, qqid)
         
         pic = await draw_best.draw()
         msg = MessageSegment.image(image_to_bytesio(pic))

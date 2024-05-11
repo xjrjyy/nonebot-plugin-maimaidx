@@ -64,10 +64,10 @@ class ChartListDrawer:
     icon = Image.open(maimaidir / 'UI_Icon_309503.png').resize((214, 214))
 
     def __init__(self,
+                 UserInfo: UserInfo,
                  chart_groups: List[ChartInfoGroup],
                  filter: Callable[[ChartInfo], bool],
                  cmp: Callable[[ChartInfo, ChartInfo], int],
-                 UserInfo: UserInfo,
                  qqId: Optional[Union[int, str]] = None
                  ) -> None:
 
@@ -166,7 +166,7 @@ class ChartListDrawer:
             self._tb.draw(x + 155, y + 70, 32, p, TEXT_COLOR[info.level_index], anchor='ld')
             self._tb.draw(x + 155 + r[2], y + 68, 22, f'.{s}%', TEXT_COLOR[info.level_index], anchor='ld')
             self._tb.draw(x + 340, y + 60, 18, f'{info.dxScore}/{dxscore}', TEXT_COLOR[info.level_index], anchor='mm')
-            self._tb.draw(x + 155, y + 80, 22, f'{info.ds} -> {info.ra}', TEXT_COLOR[info.level_index], anchor='lm')
+            self._tb.draw(x + 155, y + 80, 22, f'{info.ds:.2f} -> {info.ra}', TEXT_COLOR[info.level_index], anchor='lm')
 
         # 返回下一组的纵向坐标
         return y + dy
