@@ -80,7 +80,7 @@ class ChartListDrawer:
         self.Rating = 0
         for chart_group in self.chart_groups:
             chart_group.charts = [i for i in chart_group.charts if filter(i)]
-            chart_group.charts = sorted(chart_group.charts, key=cmp_to_key(cmp))[:chart_group.limit]
+            chart_group.charts = sorted(chart_group.charts, key=cmp_to_key(cmp), reverse=True)[:chart_group.limit]
             self.Rating += sum([_.ra for _ in chart_group.charts])
 
 

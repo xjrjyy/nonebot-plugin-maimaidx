@@ -1,6 +1,7 @@
 import math
 import traceback
 import re
+from functools import cmp_to_key
 from typing import List, Optional, Tuple, Union, Callable
 
 from nonebot.adapters.onebot.v11 import MessageSegment
@@ -69,10 +70,15 @@ class FilterArgCategory(BaseFilterArg):
         music = mai.total_list.by_id(str(info.song_id))
         return category[music.basic_info.genre] in self.categories
 
-def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Callable[[ChartInfo, ChartInfo], int], bool]:
+class FilterArgGroup(BaseFilterArg):
+    def __init__(self, group: List[int]) -> None:
+        self.group = group
+    def valid(self, info: ChartInfo) -> bool:
+        return info.song_id in self.group
+
+def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Callable[[ChartInfo, ChartInfo], int]]:
     filter_list: List[BaseFilterArg] = []
     cmp_type: Tuple[str, Optional[str]] = ('ra', None)
-    use_fit_diff = False
     reverse = False
 
     def parse(prefix: str, arg: str, re_str: str) -> Tuple[Optional[str], Optional[str]]:
@@ -124,20 +130,33 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
             category_str = arg[3:]
             if category_str.startswith(('=', '＝')):
                 category_str = category_str[1:]
-            categories = [category.lower() for category in category_str.split('+,;＋，；')]
+            categories = [category.lower() for category in re.split(r'\+|,|;|＋|，|；', category_str)]
             for item in categories:
                 if item in category:
                     item = category[item]
                 if item not in category.values():
                     raise ValueError(f'未知谱面分类：{item}')
             filter_list.append(FilterArgCategory(categories))
+        elif arg.startswith('alias'):
+            alias_str = arg[5:]
+            if alias_str.startswith(('=', '＝')):
+                alias_str = alias_str[1:]
+            group = []
+            for alias in re.split(r'\+|,|;|＋|，|；', alias_str):
+                log.info(alias)
+                data = mai.total_alias_list.by_alias(alias)
+                if not data:
+                    raise ValueError(f'未找到别名为 {alias} 的乐曲')
+                group.extend(data)
+            filter_list.append(FilterArgGroup([i.SongID for i in group]))
         elif arg.startswith('cmp'):
             cmp_type_str = arg[3:]
             if cmp_type_str.startswith(('=', '＝')):
                 cmp_type_str = cmp_type_str[1:]
             ATTRS = [
+                '1',
                 'ra', 'achv', 'dxs', 'cun', 'suo',
-                'diff', 'ds', 'bpm', 'fit',
+                'id', 'bpm', 'diff', 'ds', 'fit',
                 'tap', 'hold', 'slide', 'touch', 'break', 'note',
             ]
             attr_re = '|'.join(ATTRS)
@@ -146,10 +165,10 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
                 cmp_type = (result.group('num'), result.group('den'))
             else:
                 raise ValueError(f'未知排序方式：{cmp_type_str}')
-        elif arg == 'fit':
-            use_fit_diff = True
         elif arg == 'rev':
             reverse = True
+        elif arg in ['fit', 'x50']:
+            pass
         else:
             raise ValueError(f'未知参数：{arg}')
 
@@ -160,7 +179,7 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
         return True
     def cmp(lhs: ChartInfo, rhs: ChartInfo) -> int:
         def chart_attr(chart_info: ChartInfo, attr: Optional[str]) -> float:
-            if attr is None:
+            if attr is None or attr == '1':
                 return 1
             music = mai.total_list.by_id(str(chart_info.song_id))
             if attr == 'ra':
@@ -173,10 +192,12 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
                 return -getSuoScore(chart_info)
             elif attr == 'suo':
                 return getSuoScore(chart_info)
-            elif attr in ['diff', 'ds']:
-                return chart_info.ds
+            elif attr == 'id':
+                return chart_info.song_id
             elif attr == 'bpm':
                 return music.basic_info.bpm
+            elif attr in ['diff', 'ds']:
+                return chart_info.ds
             chart = music.charts[chart_info.level_index]
             if attr == 'fit':
                 if  music.stats is None:
@@ -201,7 +222,7 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
                 raise Exception(f'未知属性：{attr}')
         lhs_rate = chart_attr(lhs, cmp_type[0]) / max(chart_attr(lhs, cmp_type[1]), 0.0001)
         rhs_rate = chart_attr(rhs, cmp_type[0]) / max(chart_attr(rhs, cmp_type[1]), 0.0001)
-        result = (rhs_rate - lhs_rate) * (-1 if reverse else 1)
+        result = (lhs_rate - rhs_rate) * (-1 if reverse else 1)
         if result < 0:
             return -1
         elif result > 0:
@@ -209,7 +230,7 @@ def parse_filter_args(args: List[str]) -> Tuple[Callable[[ChartInfo], bool], Cal
         else:
             return 0
 
-    return (filter, cmp, use_fit_diff)
+    return (filter, cmp)
 
 def getTotalDxScore(info: ChartInfo) -> int:
     return sum(mai.total_list.by_id(str(info.song_id)).charts[info.level_index].notes) * 3
@@ -229,20 +250,23 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
     if 'help' in args:
         from .image import to_bytes_io
         return MessageSegment.image(to_bytes_io('''filter_50 帮助：
-目前支持的筛选条件：
+支持的筛选条件：
 - diff(ds) 定数：diff12+ / ds=12.6 / diff12+-13.1 / ds=12.1~ / diff～13
 - star 星数：star0 / star=1 / star1-3 / star=2~ / star～3
 - achv 达成率：achv99.5-100.4999 / achv=99.5~ / achv～100
 - lv 难度等级：lv绿 / lv=黄 / lv红-紫 / lv=紫~ / lv～白
-- cat 谱面类型：cat=anime / cat=maimai+game [anime(流行/动漫), maimai, niconico, touhou(东方), game, ongeki]
-- cmp 排序方式（从大到小）：cmpra / cmp=achv / cmp=slide/note
-  + 个人成绩：ra rating(默认) / achv 达成率 / dxs DX分数占比 / cun 寸止 / suo 锁血
-  + 谱面信息：diff(ds) 定数 / bpm / fit 拟合难度差
-  + 谱面音符数：tap / hold / slide / touch / break / note
-  + 寸止与锁血建议指定范围
-- fit 使用拟合难度作为定数
+- cat 谱面类型：cat=anime / cat=maimai+game [anime, maimai, niconico, touhou, game, ongeki]
+- alias 乐曲别名：alias海底谭 / alias=潘 / alias=弱虫+强虫
+支持的排序方式（默认从大到小）：cmpra / cmp=achv / cmp=slide/note
+- 个人成绩：ra rating(默认) / achv 达成率 / dxs DX分数占比 / cun 寸止 / suo 锁血
+- 谱面信息：id / bpm / diff(ds) 定数 / fit 拟合难度差
+- 谱面音符数：tap / hold / slide / touch / break / note
+- 寸止与锁血建议指定范围
 - rev 倒序排序
-例：f50 diff12-13 star=1 achv～100 cmp=achv rev'''))
+支持的其他选项：
+- fit 使用拟合难度作为定数
+- x50 取 ra 最高的谱面重复50次
+例：f50 diff12-13 star=1 achv～100 cmp=achv rev fit'''))
     try:
         new_args = []
         for arg in args:
@@ -258,11 +282,11 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
 
         mai_info = UserInfo(**obj)
         try:
-            filter, cmp, use_fit_diff = parse_filter_args(new_args)
+            filter, cmp = parse_filter_args(new_args)
         except ValueError as e:
             return str(e)
         
-        if use_fit_diff:
+        if 'fit' in new_args:
             for chart_info in mai_info.records:
                 music = mai.total_list.by_id(str(chart_info.song_id))
                 chart_info.ra = 0
@@ -274,12 +298,20 @@ async def generate_filter_50(args: List[str], qqid: Optional[int] = None, userna
                 chart_info.ds = stat.fit_diff
                 chart_info.ra = computeRa(chart_info.ds, chart_info.achievements)
 
-        charts_sd = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == False]
-        charts_dx = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == True]
-        chart_groups = [
-            ChartInfoGroup('B35', charts_sd, 35),
-            ChartInfoGroup('B15', charts_dx, 15),
-        ]
+        chart_groups = []
+        if 'x50' in new_args:
+            max_ra = max(mai_info.records, key=cmp_to_key(cmp))
+            chart_groups = [
+                ChartInfoGroup('B35', [max_ra] * 35, 35),
+                ChartInfoGroup('B15', [max_ra] * 15, 15),
+            ]
+        else:
+            charts_sd = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == False]
+            charts_dx = [i for i in mai_info.records if mai.total_list.by_id(str(i.song_id)).basic_info.is_new == True]
+            chart_groups = [
+                ChartInfoGroup('B35', charts_sd, 35),
+                ChartInfoGroup('B15', charts_dx, 15),
+            ]
         draw_best = ChartListDrawer(mai_info, chart_groups, filter, cmp, qqid)
         
         pic = await draw_best.draw()
